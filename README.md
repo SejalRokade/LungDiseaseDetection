@@ -1,9 +1,11 @@
 
 # Explainable AI Model for Lung Disease Detection using Deep Learning
 
-**Kaggle Dataset:** [Lungs Disease Dataset (4 types)](https://www.kaggle.com/datasets/omkarmanohardalvi/lungs-disease-dataset-4-types)
-**EfficientNet-V2-s** [MODEL](https://www.kaggle.com/code/tycod253pranitsarode/lung-efficient-net-final)
-**VIT** [MODEL](https://www.kaggle.com/code/pranit9/lung-disease-new-vit)
+**Kaggle Dataset:** [https://www.kaggle.com/datasets/omkarmanohardalvi/lungs-disease-dataset-4-types]
+**EfficientNet-V2-s** [https://www.kaggle.com/code/tycod253pranitsarode/lung-efficient-net-final]
+**VIT** [https://www.kaggle.com/code/pranit9/lung-disease-new-vit]
+
+
 
 
 
