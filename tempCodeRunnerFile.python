@@ -1,0 +1,118 @@
+import streamlit as st
+import tempfile
+import torch
+import torchvision.transforms as transforms
+from torchvision.models import efficientnet_v2_s
+import numpy as np
+import cv2
+import matplotlib.pyplot as plt
+from PIL import Image
+import os
+
+transform = transforms.Compose([
+    transforms.Resize((224, 224)),
+    transforms.ToTensor()
+    # REMOVE NORMALIZATION TEMPORARILY
+])
+
+
+def preprocess_image(image_path):
+    if not os.path.exists(image_path):
+        raise FileNotFoundError(f"Image file '{image_path}' not found!")
+    image = Image.open(image_path).convert("RGB")
+    image_tensor = transform(image).unsqueeze(0).to(device)
+    return image, image_tensor
+
+def explain_gradcam_debug(image_path):
+    # Load and preprocess the image
+    image, image_tensor = preprocess_image(image_path)
+
+    # Forward pass to get predictions
+    output = model(image_tensor)
+    predicted_class = output.argmax(dim=1).item()
+    predicted_label = classes[predicted_class]
+
+    print(f"Predicted Class: {predicted_label}")
+
+    # Hook for activations and gradients
+    gradients = None
+    activations = None
+
+    def backward_hook(module, grad_in, grad_out):
+        nonlocal gradients
+        gradients = grad_out[0]
+        print("✅ Gradients captured!")
+
+    def forward_hook(module, input, output):
+        nonlocal activations
+        activations = output
+        print("✅ Activations captured!")
+
+    # Try different layers for Grad-CAM
+    target_layers = [
+        model.features[-1],  # Last convolutional layer
+        model.features[-2],  # Second-last convolutional layer
+        model.features[-3]   # Third-last convolutional layer
+    ]
+
+    for target_layer in target_layers:
+        handle_forward = target_layer.register_forward_hook(forward_hook)
+        handle_backward = target_layer.register_backward_hook(backward_hook)
+
+        # Forward pass
+        output = model(image_tensor)
+
+        # Backward pass for the predicted class
+        model.zero_grad()
+        output[0, predicted_class].backward()
+
+        # Check if activations and gradients exist
+        if gradients is None or activations is None:
+            print("❌ No activations or gradients! Skipping this layer.")
+            handle_forward.remove()
+            handle_backward.remove()
+            continue  # Try the next layer
+
+        # Compute Grad-CAM heatmap
+        pooled_gradients = torch.mean(gradients, dim=[0, 2, 3])
+        activations = activations.squeeze(0)
+        for i in range(activations.shape[0]):
+            activations[i, :, :] *= pooled_gradients[i]
+
+        heatmap = activations.mean(dim=0).cpu().detach().numpy()
+        heatmap = np.maximum(heatmap, 0)
+        heatmap /= (np.max(heatmap) + 1e-8)
+
+        # Load original image using OpenCV
+        img = cv2.imread(image_path)
+        img = cv2.resize(img, (224, 224))
+
+        heatmap_resized = cv2.resize(heatmap, (img.shape[1], img.shape[0]))
+        heatmap_color = cv2.applyColorMap(np.uint8(255 * heatmap_resized), cv2.COLORMAP_JET)
+        superimposed_img = cv2.addWeighted(img, 0.6, heatmap_color, 0.4, 0)
+
+        # Display results
+        plt.figure(figsize=(10, 5))
+        plt.subplot(1, 2, 1)
+        plt.imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+        plt.title("Original Image")
+        plt.axis("off")
+
+        plt.subplot(1, 2, 2)
+        plt.imshow(cv2.cvtColor(superimposed_img, cv2.COLOR_BGR2RGB))
+        plt.title(f"Grad-CAM (Layer {target_layer})")
+        plt.axis("off")
+
+        plt.show()
+
+        handle_forward.remove()
+        handle_backward.remove()
+        break  # Stop if we get a valid Grad-CAM
+
+    print("Debugging Completed!")
+
+# --------------------------
+# 🔥 Run Grad-CAM Debugging
+# --------------------------
+image_path = "person53_virus_107.jpeg"
+explain_gradcam_debug(image_path)
